@@ -108,7 +108,6 @@ static void run2a_flat_no_batching(void) {
     printf("\n=== 2.a Flat (no batching) ===\n");
     int rc;
     long long start = now_ns();
-    
 
     pthread_t *ths = malloc(sizeof(pthread_t) * N_TOTAL);
     if (!ths) { perror("malloc"); exit(1); } // Error out if malloc fail
@@ -120,8 +119,10 @@ static void run2a_flat_no_batching(void) {
 
     for(int i = 0; i < N_TOTAL; ++i){
         atomic_fetch_add(&g_created, 1);
-        rc = pthread_create(&ths[i], NULL, flat_worker, argptr);
-        die_pthread(); // something must be passed here, I don't know what
+        die_pthread(pthread_create(&ths[i], NULL, flat_worker, NULL), "pthread_create A");
+        // Print progress every 1000 threads to keep the output readable but informative.
+        if ((i + 1) % 1000 == 0) printf("Created threads: %d-%d\n", i - 998, i + 1);
+
     }
 
     // TODO: loop i = 0..N_TOTAL-1
@@ -132,7 +133,8 @@ static void run2a_flat_no_batching(void) {
     
 
     for(int i = 0; i < N_TOTAL; ++i){
-       pthread_join(ths[ths.size-i],NULL);
+       die_pthread(pthread_join(ths[i], NULL), "pthread_join A");
+       if ((i + 1) % 1000 == 0) printf("Joined threads: %d-%d\n", i - 998, i + 1);
     }
     // TODO: join all threads (optionally reverse order)
     //   - pthread_join(ths[i], NULL)
@@ -147,6 +149,7 @@ static void run2a_flat_no_batching(void) {
     print_summary("2.a", start, end);
 
     // TODO: verify created == destroyed == N_TOTAL
+    // Is this accomplished in the die_pthread check added above?
 }
 
 // ============================================================
@@ -189,7 +192,8 @@ static void *child_worker_2b(void *arg) {
 
 static void *parent_worker_2b_no_batching(void *arg) {
     parent_arg_t *pa = (parent_arg_t *)arg;
-    pthread *children = malloc(sizeof(*children) * B_CHILDREN_PER_PARENT);
+    //pthread *children = malloc(sizeof(*children) * B_CHILDREN_PER_PARENT);
+    pthread_t children[B_CHILDREN_PER_PARENT];
 
     // TODO: create B_CHILDREN_PER_PARENT child threads
     //   - allocate pthread_t children[B_CHILDREN_PER_PARENT]
@@ -197,9 +201,24 @@ static void *parent_worker_2b_no_batching(void *arg) {
     // TODO: join all children
     // TODO: free pa if heap-allocated
 
+    // Parent creates children.
+    for (int i = 0; i < B_CHILDREN_PER_PARENT; ++i) {
+        atomic_fetch_add(&g_created, 1);
+        die_pthread(pthread_create(&children[i], NULL, child_worker_2b, NULL), "pthread_create B child");
+        // Print lineage periodically for specific parent/child indices.
+        if (i % 25 == 0 && (i + 1) % 50 == 0) {
+            printf("Lineage: %d-%d\n", &pa, i + 1);
+        }
+    }
+
+    // Parent joins children.
+    for (int i = 0; i < B_CHILDREN_PER_PARENT; ++i) {
+        die_pthread(pthread_join(children[i], NULL), "pthread_join B child");
+    }
+
     atomic_fetch_add(&g_destroyed, 1); // parent destroyed
     free(children);
-    children = NULL;
+    //children = NULL;
     return NULL;
 }
 
@@ -213,6 +232,14 @@ static void run2b_two_level_no_batching(void) {
     //   - allocate parent_arg_t on heap or static storage
     //   - pthread_create parent thread -> parent_worker_2b_no_batching
     // TODO: join all parents
+
+    pthread_t parents[B_PARENTS];
+    // Create the 50 parents
+    for (int i = 0; i < B_PARENTS; ++i) {
+	int ba = i;
+        atomic_fetch_add(&g_created, 1);
+        die_pthread(pthread_create(&parents[i], NULL, parent_worker_2b_no_batching, &ba), "pthread_create B parent");
+    }
 
     long long end = now_ns();
     print_summary("2.b", start, end);
@@ -367,7 +394,7 @@ int main(void) {
 
     reset_counts();
     run2a_flat_no_batching();
-    // reset_counts();
+    // reset_counts(); Batching not required as limits are never met.
     // run2a_flat_batched(A_BATCH_SIZE);
 
     reset_counts();
