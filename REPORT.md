@@ -1,8 +1,15 @@
 # Report
 
+- [System Info](#system-info)
+- [Methodology](#methodology)
+- [Thread Management](#how-threads-were-created-and-joined)
+- [Batching](#whether-batching-was-used)
+- [Analysis](#analysis)
+- [Table](#table)
+
 ## System Info:
 
-### Operating System:
+### Operating System
 ```text
 PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
 NAME="Debian GNU/Linux"
@@ -16,7 +23,7 @@ SUPPORT_URL="https://www.debian.org/support"
 BUG_REPORT_URL="https://bugs.debian.org/"
 ```
 
-### CPU:
+### CPU
 ```text
 Architecture:                            x86_64
 CPU op-mode(s):                          32-bit, 64-bit
@@ -65,14 +72,14 @@ Vulnerability Tsx async abort:           Not affected
 Vulnerability Vmscape:                   Mitigation; IBPB before exit to userspace
 ```
 
-### RAM:
+### RAM
 ```text
                total        used        free      shared  buff/cache   available
 Mem:            62Gi        21Gi        39Gi       1.4Gi       6.9Gi        40Gi
 Swap:           19Gi          0B        19Gi
 ```
 
-### Language/runtime version:
+### Language versions
 
 #### C:
 ```text
@@ -86,19 +93,31 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 Python 3.13.5
 ```
 
-### Methodology:
+## Methodology
 
-### How threads were created and joined:
+We implemented a threading performance testing application in both C and Python. Performance wass measured using the wall-clock time using high-resolution monotonic clocks. We implemented three trials of all three tests and computed an average. We used atomic counters to verify exactly 5000 threads were created and destroyed in each test.
 
-### Whether batching was used:
+## How threads were created and joined
+
+- **Model 2.a (Flat):** The main thread creates 5000 worker threads that are all parents and then joins the threads.
+- **Model 2.b (Two-Level):** The main thread creates 50 "parent" threads that each create 99 "child" threads and then children are joined before parents.
+- **Model 2.c (Three-Level):** The main thread creates 20 "parent" threads that each create 3 "child" threads and then 82 "grand child" threads. Grandchildren are joined by childre, children by parents, and parents by the main thread.
+
+## Whether batching was used
 No batching was not used or required.
 
-### Analysis:
+## Analysis
 - Discuss why times differ despite identical thread counts
 - Discuss scheduling and non-determinism
 - Comment on the effect of hierarchy
 
-### Table:
+Even though the overall threads for each expirmient was the same (5,000), the overhead of creating or deleting threads caused measurable slowdown. As the ratio of management thread increase, context switching latency increases.
+
+Threading is inherently non-deterministic. Although threads are created in a specific loop, the OS scheduler decides when they actually execute. This is observable in the "sparse" print outputs, where thread completion messages often appear out of numerical order. Variations between trials (e.g., Trial 1 being faster than Trial 2) are expected as the scheduler balances the 5,000-thread burst against other system processes.
+
+The primary effect of hierarchy is the introduction of synchronization bottlenecks. In a hierarchical model, a parent thread is effectively "blocked" on a join call, waiting for its children to finish. This creates a chain of dependencies. In the 2.c model, the main thread is at the end of a long chain: it waits for initials, which wait for children, which wait for grandchildren. This "nested waiting" increases the total time the system spends in a partially idle or blocked state compared to the flat model where the main thread can start joining any finished thread immediately.
+
+## Table
 | Language | Average 2.a (ms) | Average 2.b (ms) | Average 2.c (ms) |
 |----------|------------------|------------------|-------------------|
 | C        | 187.449          | 209.407          | 233.077           |
