@@ -19,7 +19,7 @@
  * Students: Fill in TODO blocks. Keep printing sparse.
  *
  * Build:
- *   gcc project2PosixTemplate.c -o project2PosixTemplate
+ *   gcc mainProject2.c -o mainProject2
  */
 
 #define _POSIX_C_SOURCE 200809L
