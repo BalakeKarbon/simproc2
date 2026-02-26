@@ -217,7 +217,7 @@ static void *parent_worker_2b_no_batching(void *arg) {
     }
 
     atomic_fetch_add(&g_destroyed, 1); // parent destroyed
-    free(children);
+    //free(children);
     //children = NULL;
     return NULL;
 }
@@ -239,6 +239,10 @@ static void run2b_two_level_no_batching(void) {
 	int ba = i;
         atomic_fetch_add(&g_created, 1);
         die_pthread(pthread_create(&parents[i], NULL, parent_worker_2b_no_batching, &ba), "pthread_create B parent");
+    }
+
+    for (int i = 0; i < B_PARENTS; ++i) {
+        die_pthread(pthread_join(parents[i], NULL), "pthread_join B parent");
     }
 
     long long end = now_ns();
