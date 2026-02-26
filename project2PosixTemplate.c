@@ -325,6 +325,19 @@ static void *initial_worker_2c_no_batching(void *arg) {
     //   - each child runs child_worker_2c_no_batching
     // TODO: join all children
     // TODO: free ia if heap-allocated
+    pthread_t children[C_CHILDREN_PER_INITIAL];
+
+    // Create children.
+    for (int i = 0; i < C_CHILDREN_PER_INITIAL; ++i) {
+        atomic_fetch_add(&g_created, 1);
+        die_pthread(pthread_create(&children[i], NULL, child_worker_2c_no_batching, &i), "pthread_create C child");
+    }
+
+    // Join children.
+    for (int i = 0; i < C_CHILDREN_PER_INITIAL; ++i) {
+        die_pthread(pthread_join(children[i], NULL), "pthread_join C child");
+    }
+
 
     atomic_fetch_add(&g_destroyed, 1); // initial destroyed
     return NULL;
@@ -340,6 +353,19 @@ static void run2c_three_level_no_batching(void) {
     //   - allocate initial_arg_t
     //   - pthread_create -> initial_worker_2c_no_batching
     // TODO: join all initials
+    //
+    
+    pthread_t initials[C_INITIALS];
+    // Main thread creates the 20 initial threads.
+    for (int i = 0; i < C_INITIALS; ++i) {
+        atomic_fetch_add(&g_created, 1);
+        die_pthread(pthread_create(&initials[i], NULL, initial_worker_2c_no_batching, &i + 1), "pthread_create C initial");
+    }
+
+    // Main thread joins the initial threads.
+    for (int i = 0; i < C_INITIALS; ++i) {
+        die_pthread(pthread_join(initials[i], NULL), "pthread_join C initial");
+    }
 
     long long end = now_ns();
     print_summary("2.c", start, end);
