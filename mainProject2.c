@@ -22,6 +22,9 @@
  *   gcc mainProject2.c -o mainProject2 -pthread
  */
 
+// The thread pool was modeled after this implemetation https://nachtimwald.com/2019/04/12/thread-pool-in-c/
+
+
 #define _POSIX_C_SOURCE 200809L
 
 #include <pthread.h>
@@ -31,49 +34,215 @@
 #include <time.h>
 #include <errno.h>
 #include <string.h>
+#include <stdbool.h>
+
+// Global Var for minimal work 
+volatile int minimal_work = 0;
 
 
 // ======= Thread Pool implementation ======
-typedef void (*thread_func_t)(void *arg);
+typedef void (*func_t)(void *arg); // casting function pointer into a type
+
+typedef struct threadPoolWork{
+    func_t func;
+    void *arg;
+    struct threadPoolWork *next;
+} work;
 
 
-typedef struct{
-    
-
-
-
-} ;
-
-
-
-typedef struct{
-    pthread_t threads*;
-    int numberOfThreads;
-    
-
-    threadPoolWorkLinkedList* workList;
-    int shutdown;
+typedef struct {
+    work *firstWork;
+    work *lastWork;
+    pthread_mutex_t workMutex;
+    pthread_cond_t workCond;
+    pthread_cond_t workingCond;
+    int workingCount;
+    int threadCount;
+    bool stop;
 } threadPool;
+
+
+work *createWork(func_t func, void *arg){
+    work *tmpWork;
+    if(func == NULL)
+        return NULL;
+    tmpWork = malloc(sizeof(work));
+    tmpWork->func = func;
+    tmpWork->arg = arg;
+    tmpWork->next = NULL;
+    return tmpWork;
+}
+void destroyWork(work *usedWork){
+    if(usedWork == NULL)
+        return;
+    free(usedWork);
+}
+
+work *getWork(threadPool *tp){
+    work = *tmpWork;
+    
+    if(tp == NULL)
+        return NULL;
+    
+    tmpWork = tp->firstWork;
+    if(tmpWork == NULL)
+        return NULL;
+
+    if(tmpWork-> == NULL){
+        tp->firstWork = NULL;
+        tp->lastWork = NULL;
+    }
+    else {
+        tp->firstWork = tmpWork->next;
+    }
+    return tmpWork;
+}
+
+
+bool threadPoolAddWork(threadPool *tp, func_t func, void *arg){
+    work *tmpWork;
+    
+    if(tp == NULL)
+        return false;
+
+    tmpWork = createWork(func, arg)
+    if(tmpWork == NULL)
+        return false;
+    
+    pthread_mutex_lock(&(tp->workMutex));
+    if(tp->firstWork == NULL){
+        tp->firstWork = work;
+        tp->lastWork = tp->firstWork;
+    }
+    else{
+        tp->lastWork->next = work;
+        tp->lastWork = work;
+    }
+    pthread_cond_broadcast(&(tp->workCond));
+    pthread_mutex_unlock(&(tp->workMutex));
+    
+    return true;
+}
+
+void threadWorker(void *arg){
+    
+    threadPool *tp = arg;
+    work *tmpWork;
+
+    while(1){
+        pthread_mutex_lock(&(tp->workMutex));
+        
+        while(tp->firstWork == NULL && !tp->stop)
+            pthread_cond_wait(&(tp->workCond), &(tp->workMutex));
+        
+        if(tp->stop)
+            break;
+
+        work = getWork(tp);
+        tp->workingCount++;
+        pthread_mutex_unlock(&(tp->workMutex));
+        
+        if(work != NULL){
+            work->func(work->arg);
+            destroyWork(work);
+        }
+        
+        pthread_mutex_lock(&(tp->workMutex));
+        tp->workingCount--;
+        if(!tp->stop && tp->workingCount == 0 && tp->firstWork == NULL)
+            pthread_cond_signal(&(tp->workingCond));
+        pthread_mutex_unlock(&(tp->workMutex));
+    }
+    tp->threadCount--;
+    pthread_cond_signal(&(tp->workingCond));
+    pthread_mutex_unlock(&(tp->workMutex));
+    return NULL;
+}
+
+void threadPoolWait(threadPool *tp){
+
+    if(tp == NULL)
+        return;
+    
+    pthread_mutex_lock(&(tp->workMutex));
+    while(1){
+        if(tp->firstWork != NULL || (!tp->stop && tp->workingCount != 0) || (tp->stop && tp->threadCount != 0)){
+            pthread_cond_wait(&(tp->workingCond), &(tp->workMutex));
+        }
+        else{
+            break;
+        }
+    }
+    pthread_mutex_unlock(&(tp->workMutex));
+}
+
+
+
+threadPool createThreadPool(int amount){
+    threadPool *tp;
+    pthread_t thread;
+    int i;
+    
+    tp = calloc(1, sizeof(*tp));
+    
+    pthread_mutex_init(&(tp->workMutex), NULL);
+    pthread_cond_init(&(tp->workCond), NULL);
+    pthread_cond_init(&(tp->workingCond), NULL);
+    
+    tp->firstWork = NULL;
+    tp->lastWork = NULL;
+    
+    for(i=0; i < num; i++){
+        pthread_create(&thread, NULL, threadWorker, tp);
+        pthread_detach(thread);
+    }
+    return tp;
+}
+
+
+void threadPoolDestroy(threadPool *tp){
+    
+    work *tmpWork;
+    work *tmpWork2;
+
+    if (tp == NULL)
+        return;
+    
+    pthread_mutex_lock(&(tp->workMutex));
+    tmpWork = tp->firstWork;
+    while(work != NULL){
+        tmpWork2 = tmpWork->next;
+        destroyWork(tmpWork);
+        tmpWork = tmpWork2;
+    }
+    tp->firstWork = NULL;
+    tp->stop = true;
+    pthread_cond_broadcast(&(tp->workCond));
+    pthread_mutex_unlock(&(tp->workMutex));
+    
+    tpool_wait(tp);
+
+    pthread_mutex_destroy(&(tp->workMutex));
+    pthread_cond_destroy(&(tp->workCond));
+    pthread_cond_destroy(&(tp->workingCond));
+
+    free(tp);
+}
 
 
 
 // 
 
-static void *flat_worker(void *arg) {
+static void *flat_worker_thread_pool(void *arg) {
     (void)arg;
-    // TODO: optional minimal work
-    // TODO: optional sparse print using id
+    minimal_work++;
     atomic_fetch_add(&g_destroyed, 1);
     return NULL;
 }
 
 static long long run2a_flat_thread_pool(void) {
-    printf("\n=== 2.a Flat (no batching) ===\n");
-    int rc;
+    printf("\n=== 2.a Flat (thread pool) ===\n");
     long long start = now_ns();
-
-    pthread_t *ths = malloc(sizeof(pthread_t) * N_TOTAL);
-    if (!ths) { perror("malloc"); exit(1); }
 
     // TODO: allocate pthread_t array of size N_TOTAL
     // pthread_t *ths = malloc(sizeof(*ths) * N_TOTAL);
@@ -95,22 +264,17 @@ static long long run2a_flat_thread_pool(void) {
        if ((i + 1) % 1000 == 0) printf("Joined threads: %d-%d\n", i - 998, i + 1);
     }
 
-    free(ths);
     long long end = now_ns();
     print_summary("2.a", start, end);
     return end - start;
 }
 
 
-
 //
-typedef struct {
-    int parent_id;
-    // TODO: optional fields for sparse printing
-} parent_arg_t;
 
 static void *child_worker_2b(void *arg) {
     (void)arg;
+    minimal_work++;
     // TODO: minimal work
     atomic_fetch_add(&g_destroyed, 1);
     return NULL;
@@ -118,7 +282,6 @@ static void *child_worker_2b(void *arg) {
 
 static void *parent_worker_2b_thread_pool(void *arg) {
     parent_arg_t *pa = (parent_arg_t *)arg;
-    //pthread *children = malloc(sizeof(*children) * B_CHILDREN_PER_PARENT);
     int pid = pa->parent_id;
     printf("Parent %d started\n", pid);
     
@@ -301,7 +464,8 @@ static long long run2c_three_level_no_batching(void) {
 
 
 
-
+// ======= Fixed baseline Thread Pool =======
+enum {TOTAL_THREADS = 2000};
 
 
 // ======= Fixed baseline (A, B, C must match) =======
@@ -705,10 +869,18 @@ static void run2c_three_level_batched(int grand_batch_size) {
 // main
 // ============================================================
 int main(void) {
-    // TODO: run 3 trials each and compute averages in your report.
+    threadPool *mainPool = createThreadPool(TOTAL_THREADS);
+
     long long elapsedA[3];
     long long elapsedB[3]; 
     long long elapsedC[3];
+    
+    long long elapsedD[3];
+    long long elapsedE[3]; 
+    long long elapsedF[3];
+     
+
+
     for (int i = 0;i<3;i++) {
 	printf("Trial %d:\n",i);
         reset_counts();
@@ -725,6 +897,17 @@ int main(void) {
         elapsedC[i] = run2c_three_level_no_batching();
         // reset_counts();
         // run2c_three_level_batched(C_GRANDCHILD_BATCH_SIZE);
+    
+        reset_counts();
+        elapsedD[i] = run2a_;
+        
+        reset_counts();
+        elapsedE[i] = ;
+
+        reset_counts();
+        elapsedF[i];
+
+
     }
     long long avgA = (elapsedA[0] + elapsedA[1] + elapsedA[2]) / 3;
     long long avgB = (elapsedB[0] + elapsedB[1] + elapsedB[2]) / 3;
@@ -732,10 +915,24 @@ int main(void) {
     double avgAms = avgA / 1e6;
     double avgBms = avgB / 1e6;
     double avgCms = avgC / 1e6;
+    
+    long long avgD = (elapsedD[0] + elapsedD[1] + elapsedD[2]) / 3;
+    long long avgE = (elapsedE[0] + elapsedE[1] + elapsedE[2]) / 3;
+    long long avgF = (elapsedF[0] + elapsedF[1] + elapsedF[2]) / 3;
+    double avgDms = avgD / 1e6;
+    double avgEms = avgE / 1e6;
+    double avgFms = avgF / 1e6;
+
+
     printf("Averages:\n\n");
     printf("Average 2.a elapsed: %.3f ms\n", avgAms);
     printf("Average 2.b elapsed: %.3f ms\n", avgBms);
     printf("Average 2.c elapsed: %.3f ms\n", avgCms);
 
+    printf("Average 2.a elapsed: %.3f ms\n", avgDms);
+    printf("Average 2.b elapsed: %.3f ms\n", avgEms);
+    printf("Average 2.c elapsed: %.3f ms\n", avgFms);
+
+    threadPoolDestroy(mainPool);
     return 0;
 }
