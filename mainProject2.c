@@ -530,7 +530,7 @@ static void *parent_worker_2b_thread_pool(void *arg) {
 
         if ((i + 1) % 25 == 0) printf("Parent %d added children to work: %d-%d ... %d-%d\n", pid, pid, i - 23, pid, i + 1);
     }
-    threadPoolWait(holder->tp);
+    //threadPoolWait(holder->tp);
 
     printf("Work Complete!\n");
 
@@ -737,13 +737,13 @@ static void *child_worker_2c_thread_pool(void *arg) {
     
     for (int i = 0; i < C_GRANDCHILDREN_PER_CHILD; ++i) {
         atomic_fetch_add(&g_created, 1);
-        threadPoolAddWork(holder->tp,grandchild_worker_2c, NULL);
+        threadPoolAddWork(holder->tp, grandchild_worker_2c, NULL);
         if ((i + 1) % 25 == 0) {
             printf("Child %d-%d added grandchildren to work: %d-%d-%d ... %d-%d-%d\n", iid, cid, iid, cid, i - 23, iid, cid, i + 1);
         }
     }
 
-    threadPoolWait(holder->tp);
+    //threadPoolWait(holder->tp);
     
     printf("Child %d-%d completed\n", iid, cid);
 
@@ -764,12 +764,12 @@ static void *initial_worker_2c_thread_pool(void *arg) {
         childHolder->parentid = iid;
         childHolder->id = i+1;
 
-        threadPoolAddWork(holder->tp, child_worker_2c_thread_pool, holder);
         atomic_fetch_add(&g_created, 1);
+        threadPoolAddWork(holder->tp, child_worker_2c_thread_pool, childHolder);
         printf("Initial %d added child to work: %d-%d\n", iid, iid, i + 1);
     }
 
-    threadPoolWait(holder->tp);
+    //threadPoolWait(holder->tp);
 
     printf("Initial %d completed\n", iid);
     
@@ -779,18 +779,15 @@ static void *initial_worker_2c_thread_pool(void *arg) {
 }
 
 static long long run2c_three_level_thread_pool(threadPool *mainPool) {
-
     printf("\n=== 2.c Three-level (thread pooling) ===\n");
     long long start = now_ns();
-
-   
 
     for (int i = 0; i < C_INITIALS; ++i) {
         grandchild_2c *holder = malloc(sizeof(*holder));
         holder->tp = mainPool;
         holder->parentid = i+1;
         atomic_fetch_add(&g_created, 1);
-        threadPoolAddWork(mainPool, initial_worker_2c_thread_pool, &holder);
+        threadPoolAddWork(mainPool, initial_worker_2c_thread_pool, holder);
     }
 
     threadPoolWait(mainPool);
@@ -866,9 +863,9 @@ int main(void) {
     printf("Average 2.b elapsed: %.3f ms\n", avgBms);
     printf("Average 2.c elapsed: %.3f ms\n", avgCms);
 
-    printf("Average 2.a elapsed: %.3f ms\n", avgDms);
-    printf("Average 2.b elapsed: %.3f ms\n", avgEms);
-    printf("Average 2.c elapsed: %.3f ms\n", avgFms);
+    printf("Average 2.d elapsed: %.3f ms\n", avgDms);
+    printf("Average 2.e elapsed: %.3f ms\n", avgEms);
+    printf("Average 2.f elapsed: %.3f ms\n", avgFms);
 
     threadPoolDestroy(mainPool);
     return 0;
